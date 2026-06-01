@@ -1,972 +1,804 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>BFS/DFS Pathfinder</title>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
-<style>
-/* ─── CSS Variables (theme) ─── */
-:root {
-  --bg:        #0a0a12;
-  --panel:     #12121e;
-  --panel2:    #1a1a2e;
-  --border:    #2a2a4a;
-  --accent:    #00f5d4;
-  --accent2:   #f72585;
-  --accent3:   #7209b7;
-  --text:      #e0e0ff;
-  --text-dim:  #666688;
-  --cell-free: #1a1a2e;
-  --cell-wall: #0d0d18;
-  --cell-vis:  #1a4a6a;
-  --cell-path: #5a3a00;
-  --cell-start:#004a30;
-  --cell-end:  #4a0010;
-  --cell-agent:#6a2000;
-  --cell-alt:  #2a1a5a;
-  --glow:      rgba(0,245,212,0.15);
-  --cell-size: 54px;
-  --anim-speed:80;
-  --font-main: 'Share Tech Mono', monospace;
-  --font-title:'Orbitron', monospace;
-}
-
-*{margin:0;padding:0;box-sizing:border-box;}
-
-body{
-  background:var(--bg);
-  color:var(--text);
-  font-family:var(--font-main);
-  min-height:100vh;
-  overflow-x:hidden;
-}
-
-/* Animated background grid */
-body::before{
-  content:'';
-  position:fixed; inset:0;
-  background-image:
-    linear-gradient(rgba(0,245,212,.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,245,212,.03) 1px, transparent 1px);
-  background-size:40px 40px;
-  pointer-events:none;
-  z-index:0;
-}
-
-/* ─── Layout ─── */
-.app{ position:relative; z-index:1; display:flex; flex-direction:column; min-height:100vh; }
-
-/* ─── Header ─── */
-header{
-  padding:18px 24px 14px;
-  border-bottom:1px solid var(--border);
-  background:linear-gradient(to right, var(--panel), transparent);
-  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
-}
-.logo{
-  font-family:var(--font-title);
-  font-size:20px; font-weight:900;
-  background:linear-gradient(135deg, var(--accent), var(--accent2));
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  letter-spacing:2px; white-space:nowrap;
-}
-.logo span{ font-size:11px; display:block; font-weight:400; letter-spacing:4px; opacity:.7; }
-
-.btn-group{ display:flex; gap:8px; flex-wrap:wrap; }
-.btn{
-  padding:8px 16px; border:1px solid var(--border);
-  background:var(--panel2); color:var(--text);
-  font-family:var(--font-main); font-size:12px;
-  cursor:pointer; border-radius:4px;
-  transition:all .2s; white-space:nowrap;
-  position:relative; overflow:hidden;
-}
-.btn::after{
-  content:''; position:absolute; inset:0;
-  background:var(--accent); opacity:0;
-  transition:opacity .2s;
-}
-.btn:hover{ border-color:var(--accent); color:var(--accent); }
-.btn:hover::after{ opacity:.05; }
-.btn.primary{ border-color:var(--accent); color:var(--accent); }
-.btn.primary:hover{ background:var(--accent); color:var(--bg); }
-.btn.danger{ border-color:var(--accent2); color:var(--accent2); }
-.btn.danger:hover{ background:var(--accent2); color:#fff; }
-.btn:disabled{ opacity:.35; cursor:not-allowed; }
-
-/* speed */
-.speed-wrap{ display:flex; align-items:center; gap:8px; margin-left:auto; }
-.speed-wrap label{ font-size:11px; color:var(--text-dim); }
-input[type=range]{
-  -webkit-appearance:none; width:100px; height:3px;
-  background:var(--border); border-radius:2px; outline:none;
-}
-input[type=range]::-webkit-slider-thumb{
-  -webkit-appearance:none; width:14px; height:14px;
-  border-radius:50%; background:var(--accent); cursor:pointer;
-  box-shadow:0 0 8px var(--accent);
-}
-
-/* ─── Status bar ─── */
-#status{
-  padding:8px 24px;
-  font-size:12px; color:var(--accent);
-  border-bottom:1px solid var(--border);
-  background:var(--panel);
-  min-height:32px;
-  overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
-}
-#status.error{ color:var(--accent2); }
-
-/* ─── Main layout ─── */
-.main{ display:flex; flex:1; gap:0; overflow:hidden; }
-
-/* ─── Canvas area ─── */
-.canvas-wrap{
-  flex:1; overflow:auto; padding:24px;
-  display:flex; flex-direction:column; align-items:center; gap:16px;
-}
-#grid-container{
-  display:inline-grid;
-  gap:2px;
-  padding:16px;
-  background:var(--panel);
-  border:1px solid var(--border);
-  border-radius:8px;
-  box-shadow:0 0 40px var(--glow);
-}
-.cell{
-  width:var(--cell-size); height:var(--cell-size);
-  border-radius:3px;
-  display:flex; align-items:center; justify-content:center;
-  font-size:11px; font-weight:bold;
-  cursor:pointer;
-  transition:background .15s, box-shadow .15s, transform .1s;
-  user-select:none;
-  position:relative;
-  border:1px solid rgba(255,255,255,.04);
-}
-.cell:hover{ transform:scale(1.08); z-index:2; }
-.cell.free    { background:var(--cell-free); color:var(--text-dim); }
-.cell.wall    { background:var(--cell-wall); color:#333; cursor:pointer; }
-.cell.visited { background:var(--cell-vis);  color:var(--accent);
-                box-shadow:inset 0 0 8px rgba(0,245,212,.25); }
-.cell.path    { background:var(--cell-path); color:#fdcb6e;
-                box-shadow:0 0 12px rgba(253,203,110,.4); }
-.cell.start   { background:var(--cell-start); color:#00b894;
-                box-shadow:0 0 16px rgba(0,184,148,.5); }
-.cell.end     { background:var(--cell-end);   color:#e17055;
-                box-shadow:0 0 16px rgba(225,112,85,.5); }
-.cell.agent   { background:var(--cell-agent); color:#e17055;
-                box-shadow:0 0 20px rgba(225,112,85,.7);
-                transform:scale(1.15); z-index:5; }
-.cell.alt     { background:var(--cell-alt);  color:#a29bfe; }
-
-.cell .cell-label{ font-size:9px; opacity:.5; position:absolute; bottom:2px; right:4px; }
-
-/* Coord labels */
-.coord-row, .coord-col{
-  display:flex; align-items:center; justify-content:center;
-  font-size:9px; color:var(--text-dim);
-  width:var(--cell-size);
-}
-
-/* Mode indicator */
-.mode-bar{
-  display:flex; gap:8px; align-items:center;
-  flex-wrap:wrap; font-size:11px;
-}
-.mode-item{
-  padding:5px 12px; border-radius:3px; border:1px solid var(--border);
-  cursor:pointer; transition:all .2s;
-  background:var(--panel2);
-}
-.mode-item.active{ border-color:var(--accent); color:var(--accent); background:rgba(0,245,212,.08); }
-
-/* ─── Sidebar ─── */
-.sidebar{
-  width:280px; min-width:240px;
-  border-left:1px solid var(--border);
-  background:var(--panel);
-  display:flex; flex-direction:column;
-  overflow:hidden;
-}
-.tab-bar{
-  display:flex; border-bottom:1px solid var(--border);
-}
-.tab{
-  flex:1; padding:10px 4px; text-align:center;
-  font-size:11px; cursor:pointer; color:var(--text-dim);
-  border-bottom:2px solid transparent;
-  transition:all .2s;
-}
-.tab.active{ color:var(--accent); border-bottom-color:var(--accent); }
-.tab-content{ display:none; flex:1; flex-direction:column; overflow:hidden; }
-.tab-content.active{ display:flex; }
-
-/* Results */
-#result-box{
-  flex:1; overflow-y:auto; padding:12px;
-  font-size:11px; line-height:1.8;
-  color:var(--text-dim);
-}
-#result-box .hi{ color:var(--accent); }
-#result-box .hi2{ color:var(--accent2); }
-#result-box .hi3{ color:#fdcb6e; }
-
-/* ─── Customize panel ─── */
-.customize{
-  padding:12px; overflow-y:auto; flex:1;
-  display:flex; flex-direction:column; gap:12px;
-}
-.cust-group{ border:1px solid var(--border); border-radius:6px; padding:10px; }
-.cust-title{ font-size:10px; color:var(--accent); letter-spacing:2px; margin-bottom:8px; }
-.cust-row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:11px; }
-.cust-row label{ flex:1; color:var(--text-dim); }
-input[type=color]{
-  width:36px; height:24px; border:none; background:none;
-  cursor:pointer; border-radius:3px; padding:1px;
-}
-input[type=number]{
-  width:52px; background:var(--panel2); border:1px solid var(--border);
-  color:var(--text); padding:3px 6px; font-family:var(--font-main);
-  font-size:11px; border-radius:3px; outline:none;
-}
-select{
-  background:var(--panel2); border:1px solid var(--border);
-  color:var(--text); padding:4px 8px; font-family:var(--font-main);
-  font-size:11px; border-radius:3px; outline:none; cursor:pointer;
-}
-.theme-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-.theme-btn{
-  padding:6px; border-radius:4px; cursor:pointer; text-align:center;
-  font-size:10px; border:1px solid transparent; transition:all .2s;
-}
-.theme-btn:hover{ border-color:var(--accent); }
-
-/* Grid size */
-.grid-size-row{ display:flex; align-items:center; gap:6px; font-size:11px; }
-.grid-size-row label{ color:var(--text-dim); width:50px; }
-
-/* ─── Scrollbar ─── */
-::-webkit-scrollbar{ width:5px; height:5px; }
-::-webkit-scrollbar-track{ background:var(--panel); }
-::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
-::-webkit-scrollbar-thumb:hover{ background:var(--accent3); }
-
-/* ─── Pulse animation ─── */
-@keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.5} }
-@keyframes pop{ 0%{transform:scale(0.5)} 60%{transform:scale(1.2)} 100%{transform:scale(1)} }
-.cell.just-visited{ animation:pop .25s ease; }
-.cell.agent{ animation:pulse .6s ease infinite; }
-
-/* ─── Toast ─── */
-#toast{
-  position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
-  background:var(--panel2); border:1px solid var(--accent);
-  color:var(--accent); padding:10px 24px; border-radius:6px;
-  font-size:13px; z-index:999;
-  transition:transform .3s; pointer-events:none;
-  box-shadow:0 0 20px var(--glow);
-}
-#toast.show{ transform:translateX(-50%) translateY(0); }
-</style>
-</head>
-<body>
-<div class="app">
-
-<!-- ─── Header ─── -->
-<header>
-  <div class="logo">PATHFINDER<span>BFS / DFS ENGINE v2</span></div>
-  <div class="btn-group">
-    <button class="btn primary" onclick="runBFS()">▶ Chạy BFS</button>
-    <button class="btn" onclick="runDFS()">🌲 Đếm DFS</button>
-    <button class="btn" onclick="runMove()">🚀 Di chuyển</button>
-    <button class="btn danger" onclick="stopAnim()">⏹ Dừng</button>
-    <button class="btn" onclick="resetView()">↺ Reset</button>
-  </div>
-  <div class="speed-wrap">
-    <label>TỐC ĐỘ</label>
-    <input type="range" id="speedSlider" min="20" max="500" value="80"
-           oninput="animSpeed=parseInt(this.value)"/>
-    <span id="speedVal" style="font-size:11px;color:var(--accent);">80ms</span>
-  </div>
-</header>
-
-<!-- ─── Status ─── -->
-<div id="status">Chào mừng! Hãy nhấn ▶ Chạy BFS để bắt đầu với lưới mẫu.</div>
-
-<!-- ─── Main ─── -->
-<div class="main">
-
-  <!-- Canvas area -->
-  <div class="canvas-wrap">
-
-    <!-- Mode bar -->
-    <div class="mode-bar">
-      <span style="color:var(--text-dim);font-size:11px;">CHẾ ĐỘ:</span>
-      <div class="mode-item active" id="m-toggle" onclick="setMode('toggle')">✏ Toggle 0↔1</div>
-      <div class="mode-item" id="m-start"  onclick="setMode('start')">🟢 Đặt điểm A</div>
-      <div class="mode-item" id="m-end"    onclick="setMode('end')">🔴 Đặt điểm B</div>
-      <div class="mode-item" id="m-erase"  onclick="setMode('erase')">🗑 Xóa tường</div>
-    </div>
-
-    <!-- Grid -->
-    <div id="grid-container"></div>
-
-    <!-- Info row -->
-    <div style="display:flex;gap:16px;font-size:11px;color:var(--text-dim);flex-wrap:wrap;justify-content:center;">
-      <span>A = <b id="info-start" style="color:#00b894">-</b></span>
-      <span>B = <b id="info-end"   style="color:#e17055">-</b></span>
-      <span>Lưới: <b id="info-size" style="color:var(--accent)">-</b></span>
-      <span>BFS bước: <b id="info-bsteps" style="color:#fdcb6e">-</b></span>
-      <span>DFS đường: <b id="info-dpaths" style="color:#a29bfe">-</b></span>
-    </div>
-  </div>
-
-  <!-- Sidebar -->
-  <div class="sidebar">
-    <div class="tab-bar">
-      <div class="tab active" onclick="switchTab('results')">📊 Kết quả</div>
-      <div class="tab" onclick="switchTab('grid')">⚙ Lưới</div>
-      <div class="tab" onclick="switchTab('theme')">🎨 Giao diện</div>
-    </div>
-
-    <!-- Tab: Results -->
-    <div id="tab-results" class="tab-content active">
-      <div id="result-box"><span style="color:var(--text-dim)">Chưa có kết quả...</span></div>
-    </div>
-
-    <!-- Tab: Grid settings -->
-    <div id="tab-grid" class="tab-content">
-      <div class="customize">
-        <div class="cust-group">
-          <div class="cust-title">KÍCH THƯỚC LƯỚI</div>
-          <div class="grid-size-row">
-            <label>Hàng:</label>
-            <input type="number" id="inp-rows" value="6" min="2" max="20"/>
-          </div>
-          <div class="grid-size-row" style="margin-top:6px;">
-            <label>Cột:</label>
-            <input type="number" id="inp-cols" value="6" min="2" max="20"/>
-          </div>
-          <div style="margin-top:8px;display:flex;gap:6px;">
-            <button class="btn" style="flex:1" onclick="rebuildGrid()">✓ Áp dụng</button>
-            <button class="btn" onclick="loadSample()">📋 Lưới mẫu</button>
-          </div>
-        </div>
-
-        <div class="cust-group">
-          <div class="cust-title">KÍCH THƯỚC Ô</div>
-          <div class="cust-row">
-            <label>Px/ô:</label>
-            <input type="range" id="cellSizeSlider" min="30" max="90" value="54"
-                   style="flex:1" oninput="setCellSize(this.value)"/>
-            <span id="cellSizeVal" style="font-size:11px;color:var(--accent)">54</span>
-          </div>
-        </div>
-
-        <div class="cust-group">
-          <div class="cust-title">RANDOM MAZE</div>
-          <div class="cust-row">
-            <label>Mật độ tường:</label>
-            <input type="range" id="densitySlider" min="0" max="70" value="30" style="flex:1"/>
-            <span id="densityVal" style="font-size:11px;color:var(--accent)">30%</span>
-          </div>
-          <button class="btn" style="width:100%;margin-top:4px" onclick="generateRandom()">🎲 Tạo ngẫu nhiên</button>
-        </div>
-
-        <div class="cust-group">
-          <div class="cust-title">XUẤT / NHẬP</div>
-          <button class="btn" style="width:100%;margin-bottom:6px" onclick="exportGrid()">💾 Xuất JSON</button>
-          <button class="btn" style="width:100%" onclick="document.getElementById('importInput').click()">📂 Nhập JSON</button>
-          <input type="file" id="importInput" accept=".json" style="display:none" onchange="importGrid(event)"/>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab: Theme -->
-    <div id="tab-theme" class="tab-content">
-      <div class="customize">
-
-        <div class="cust-group">
-          <div class="cust-title">THEMES CÓ SẴN</div>
-          <div class="theme-grid" id="theme-presets"></div>
-        </div>
-
-        <div class="cust-group">
-          <div class="cust-title">MÀU NỀN & BẢNG</div>
-          <div class="cust-row"><label>Nền tổng</label>
-            <input type="color" value="#0a0a12" oninput="setVar('--bg',this.value)"/></div>
-          <div class="cust-row"><label>Panel</label>
-            <input type="color" value="#12121e" oninput="setVar('--panel',this.value)"/></div>
-          <div class="cust-row"><label>Accent chính</label>
-            <input type="color" value="#00f5d4" oninput="setVar('--accent',this.value)"/></div>
-          <div class="cust-row"><label>Accent phụ</label>
-            <input type="color" value="#f72585" oninput="setVar('--accent2',this.value)"/></div>
-        </div>
-
-        <div class="cust-group">
-          <div class="cust-title">MÀU Ô LƯỚI</div>
-          <div class="cust-row"><label>Ô trống</label>
-            <input type="color" value="#1a1a2e" oninput="setVar('--cell-free',this.value)"/></div>
-          <div class="cust-row"><label>Tường</label>
-            <input type="color" value="#0d0d18" oninput="setVar('--cell-wall',this.value)"/></div>
-          <div class="cust-row"><label>Đã duyệt BFS</label>
-            <input type="color" value="#1a4a6a" oninput="setVar('--cell-vis',this.value)"/></div>
-          <div class="cust-row"><label>Đường ngắn nhất</label>
-            <input type="color" value="#5a3a00" oninput="setVar('--cell-path',this.value)"/></div>
-          <div class="cust-row"><label>Điểm A</label>
-            <input type="color" value="#004a30" oninput="setVar('--cell-start',this.value)"/></div>
-          <div class="cust-row"><label>Điểm B</label>
-            <input type="color" value="#4a0010" oninput="setVar('--cell-end',this.value)"/></div>
-          <div class="cust-row"><label>Agent</label>
-            <input type="color" value="#6a2000" oninput="setVar('--cell-agent',this.value)"/></div>
-          <div class="cust-row"><label>DFS (đường khác)</label>
-            <input type="color" value="#2a1a5a" oninput="setVar('--cell-alt',this.value)"/></div>
-        </div>
-
-        <div class="cust-group">
-          <div class="cust-title">FONT</div>
-          <div class="cust-row">
-            <label>Font chính</label>
-            <select onchange="setVar('--font-main',this.value)">
-              <option value="'Share Tech Mono',monospace">Share Tech Mono</option>
-              <option value="'Courier New',monospace">Courier New</option>
-              <option value="'Consolas',monospace">Consolas</option>
-              <option value="'Georgia',serif">Georgia</option>
-              <option value="'Trebuchet MS',sans-serif">Trebuchet MS</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div><!-- /sidebar -->
-</div><!-- /main -->
-</div><!-- /app -->
-
-<div id="toast"></div>
-
-<script>
-/* ═══════════════════════════════════════
-   STATE
-═══════════════════════════════════════ */
-let ROWS=6, COLS=6;
-let gridData=[], startCell=null, endCell=null;
-let bfsPath=[], bfsLog=[], allPaths=[];
-let animId=null, animPhase='idle', animSpeed=80;
-let mode='toggle';
-let mouseDown=false;
-
-const DIRS=[[-1,0],[1,0],[0,-1],[0,1]];
-
-/* ═══════════════════════════════════════
-   SAMPLE GRID
-═══════════════════════════════════════ */
-const SAMPLE=[
-  [0,1,0,0,0,0],
-  [0,1,0,1,1,0],
-  [0,0,0,1,0,0],
-  [1,1,0,0,0,1],
-  [0,0,1,1,0,0],
-  [0,0,0,0,0,0],
-];
-
-function loadSample(){
-  ROWS=6; COLS=6;
-  document.getElementById('inp-rows').value=6;
-  document.getElementById('inp-cols').value=6;
-  gridData=SAMPLE.map(r=>[...r]);
-  startCell=[0,0]; endCell=[5,5];
-  bfsPath=[]; bfsLog=[]; allPaths=[];
-  buildDOM(); updateInfoBar();
-  setStatus('Đã tải lưới mẫu 6×6. Nhấn ▶ Chạy BFS để bắt đầu!');
-}
-
-/* ═══════════════════════════════════════
-   BUILD DOM GRID
-═══════════════════════════════════════ */
-function buildDOM(){
-  stopAnim();
-  const gc=document.getElementById('grid-container');
-  gc.style.gridTemplateColumns=`repeat(${COLS}, var(--cell-size))`;
-  gc.innerHTML='';
-  for(let r=0;r<ROWS;r++){
-    for(let c=0;c<COLS;c++){
-      const el=document.createElement('div');
-      el.id=`c${r}_${c}`;
-      el.className='cell';
-      el.dataset.r=r; el.dataset.c=c;
-      el.addEventListener('mousedown',e=>{mouseDown=true;onCellClick(r,c,e);});
-      el.addEventListener('mouseenter',e=>{ if(mouseDown) onCellDrag(r,c);});
-      const lbl=document.createElement('span');
-      lbl.className='cell-label';
-      lbl.textContent=`${r},${c}`;
-      el.appendChild(lbl);
-      gc.appendChild(el);
-    }
-  }
-  document.addEventListener('mouseup',()=>mouseDown=false);
-  redrawAll();
-}
-
-function rebuildGrid(){
-  ROWS=Math.max(2,Math.min(20,parseInt(document.getElementById('inp-rows').value)||6));
-  COLS=Math.max(2,Math.min(20,parseInt(document.getElementById('inp-cols').value)||6));
-  gridData=Array.from({length:ROWS},()=>new Array(COLS).fill(0));
-  startCell=null; endCell=null;
-  bfsPath=[]; bfsLog=[]; allPaths=[];
-  buildDOM(); updateInfoBar();
-  setStatus(`Lưới ${ROWS}×${COLS} mới. Nhấn 🎲 để tạo ngẫu nhiên hoặc vẽ tường.`);
-}
-
-/* ═══════════════════════════════════════
-   CELL INTERACTIONS
-═══════════════════════════════════════ */
-function setMode(m){
-  mode=m;
-  document.querySelectorAll('.mode-item').forEach(el=>el.classList.remove('active'));
-  document.getElementById(`m-${m}`)?.classList.add('active');
-}
-
-function onCellClick(r,c,e){
-  e.preventDefault();
-  applyMode(r,c);
-}
-function onCellDrag(r,c){
-  if(mode==='toggle'||mode==='erase') applyMode(r,c);
-}
-
-function applyMode(r,c){
-  if(mode==='toggle'){
-    if(sameCell([r,c],startCell)||sameCell([r,c],endCell)) return;
-    gridData[r][c]^=1; redrawCell(r,c);
-  } else if(mode==='erase'){
-    if(sameCell([r,c],startCell)||sameCell([r,c],endCell)) return;
-    gridData[r][c]=0; redrawCell(r,c);
-  } else if(mode==='start'){
-    if(gridData[r][c]===1){ toast('Ô tường! Chọn ô trống.'); return; }
-    const old=startCell; startCell=[r,c];
-    if(old) redrawCell(old[0],old[1]);
-    redrawCell(r,c); updateInfoBar();
-  } else if(mode==='end'){
-    if(gridData[r][c]===1){ toast('Ô tường! Chọn ô trống.'); return; }
-    const old=endCell; endCell=[r,c];
-    if(old) redrawCell(old[0],old[1]);
-    redrawCell(r,c); updateInfoBar();
-  }
-}
-
-/* ═══════════════════════════════════════
-   DRAW
-═══════════════════════════════════════ */
-const visitedSet=new Set(), pathSet=new Set(), altSet=new Set();
-let agentCell=null;
-
-function redrawAll(){
-  visitedSet.clear(); pathSet.clear(); altSet.clear(); agentCell=null;
-  bfsLog.forEach(c=>visitedSet.add(key(c)));
-  bfsPath.forEach(c=>pathSet.add(key(c)));
-  allPaths.forEach(p=>p.forEach(c=>altSet.add(key(c))));
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) redrawCell(r,c);
-}
-
-function redrawCell(r,c,forceAgent){
-  const el=document.getElementById(`c${r}_${c}`);
-  if(!el) return;
-  const k=key([r,c]);
-  const isStart=sameCell([r,c],startCell);
-  const isEnd  =sameCell([r,c],endCell);
-  const isAgent=forceAgent||sameCell([r,c],agentCell);
-
-  el.className='cell';
-  let txt='';
-  if(isStart)        { el.classList.add('start');   txt='A'; }
-  else if(isEnd)     { el.classList.add('end');     txt='B'; }
-  else if(isAgent)   { el.classList.add('agent');   txt='●'; }
-  else if(pathSet.has(k))    { el.classList.add('path');    txt='·'; }
-  else if(visitedSet.has(k)) { el.classList.add('visited'); txt='·'; }
-  else if(altSet.has(k))     { el.classList.add('alt');     txt='·'; }
-  else if(gridData[r][c]===1){ el.classList.add('wall');    txt='▪'; }
-  else                       { el.classList.add('free');    txt=''; }
-
-  // keep coord label
-  el.innerHTML=`${txt}<span class="cell-label">${r},${c}</span>`;
-}
-
-function key(c){ return c[0]*1000+c[1]; }
-function sameCell(a,b){ return a&&b&&a[0]===b[0]&&a[1]===b[1]; }
-
-/* ═══════════════════════════════════════
-   BFS
-═══════════════════════════════════════ */
-function bfsAlgo(grid,start,end){
-  const rows=grid.length, cols=grid[0].length;
-  const queue=[start], visited=new Set([key(start)]);
-  const parent=new Map([[key(start),null]]);
-  const log=[start];
-  while(queue.length){
-    const curr=queue.shift();
-    if(sameCell(curr,end)) break;
-    for(const [dr,dc] of DIRS){
-      const nxt=[curr[0]+dr,curr[1]+dc];
-      const k=key(nxt);
-      if(nxt[0]>=0&&nxt[0]<rows&&nxt[1]>=0&&nxt[1]<cols
-         &&grid[nxt[0]][nxt[1]]===0&&!visited.has(k)){
-        visited.add(k); parent.set(k,curr);
-        queue.push(nxt); log.push(nxt);
-      }
-    }
-  }
-  if(!parent.has(key(end))) return {path:null,log};
-  const path=[]; let node=end;
-  while(node){ path.push(node); const pk=key(node); node=parent.get(pk); }
-  path.reverse(); return {path,log};
-}
-
-function runBFS(){
-  if(!checkReady()) return;
-  stopAnim();
-  visitedSet.clear(); pathSet.clear(); altSet.clear(); agentCell=null;
-  bfsLog=[]; bfsPath=[];
-  redrawAll();
-  logClear();
-
-  const t0=performance.now();
-  const res=bfsAlgo(gridData,startCell,endCell);
-  const dt=(performance.now()-t0).toFixed(2);
-  bfsLog=res.log; bfsPath=res.path||[];
-
-  if(bfsPath.length){
-    log(`<span class="hi">✅ BFS tìm thấy đường!</span>`);
-    log(`   Số bước: <span class="hi3">${bfsPath.length-1}</span>`);
-    log(`   Ô đã duyệt: <span class="hi">${bfsLog.length}</span>`);
-    log(`   Thời gian: <span class="hi">${dt} ms</span>`);
-    log(`\n<span class="hi">📍 Đường đi:</span>`);
-    bfsPath.forEach((p,i)=>log(`   ${i}: (${p[0]},${p[1]})`));
-    document.getElementById('info-bsteps').textContent=bfsPath.length-1;
-  } else {
-    log(`<span class="hi2">❌ Không tìm thấy đường đi!</span>`);
-    document.getElementById('info-bsteps').textContent='—';
-  }
-
-  animPhase='bfs'; animStep=0; tickBFS();
-}
-
-let animStep=0;
-function tickBFS(){
-  if(animPhase!=='bfs') return;
-  if(animStep<bfsLog.length){
-    const c=bfsLog[animStep];
-    visitedSet.add(key(c));
-    redrawCell(c[0],c[1]);
-    setStatus(`🔍 BFS duyệt (${c[0]},${c[1]}) — [${animStep+1}/${bfsLog.length}]`);
-    animStep++; animId=setTimeout(tickBFS,animSpeed);
-  } else {
-    animPhase='showpath'; animStep=0; tickPath();
-  }
-}
-function tickPath(){
-  if(animPhase!=='showpath') return;
-  if(!bfsPath.length){
-    setStatus('❌ Không có đường từ A đến B!','error'); animPhase='idle'; return;
-  }
-  if(animStep<=bfsPath.length){
-    bfsPath.slice(0,animStep).forEach(c=>{ pathSet.add(key(c)); redrawCell(c[0],c[1]); });
-    setStatus(`✨ Hiển thị đường ngắn nhất... [${animStep}/${bfsPath.length}]`);
-    animStep++; animId=setTimeout(tickPath,animSpeed);
-  } else {
-    setStatus(`✅ BFS hoàn tất! Đường ngắn nhất: ${bfsPath.length-1} bước — Nhấn 🌲 DFS hoặc 🚀 Di chuyển`);
-    animPhase='idle';
-  }
-}
-
-/* ═══════════════════════════════════════
-   DFS
-═══════════════════════════════════════ */
-function dfsAlgo(grid,start,end){
-  const rows=grid.length,cols=grid[0].length;
-  const results=[], visited=new Set();
-  function dfs(node,path){
-    if(sameCell(node,end)){ results.push([...path]); return; }
-    visited.add(key(node));
-    for(const [dr,dc] of DIRS){
-      const nxt=[node[0]+dr,node[1]+dc];
-      if(nxt[0]>=0&&nxt[0]<rows&&nxt[1]>=0&&nxt[1]<cols
-         &&grid[nxt[0]][nxt[1]]===0&&!visited.has(key(nxt))){
-        path.push(nxt); dfs(nxt,path); path.pop();
-      }
-    }
-    visited.delete(key(node));
-  }
-  dfs(start,[start]); return results;
-}
-
-function runDFS(){
-  if(!checkReady()) return;
-  stopAnim();
-  setStatus('⏳ DFS đang đếm tất cả đường... có thể lâu với lưới lớn.');
-  logClear();
-  log(`<span class="hi">⏳ Đang chạy DFS...</span>`);
-
-  setTimeout(()=>{
-    const t0=performance.now();
-    allPaths=dfsAlgo(gridData,startCell,endCell);
-    const dt=(performance.now()-t0).toFixed(2);
-
-    altSet.clear();
-    allPaths.forEach(p=>p.forEach(c=>altSet.add(key(c))));
-    redrawAll();
-
-    log(`<span class="hi">🌲 DFS hoàn tất!</span>`);
-    log(`   Tổng đường đi: <span class="hi2">${allPaths.length}</span>`);
-    log(`   Thời gian: <span class="hi">${dt} ms</span>`);
-    if(allPaths.length){
-      log(`\n<span class="hi">📋 Danh sách:</span>`);
-      allPaths.forEach((p,i)=>{
-        log(`\n  <span class="hi3">[${i+1}]</span> <span class="hi">${p.length-1} bước</span>`);
-        log(`   `+p.map(c=>`(${c[0]},${c[1]})`).join(' → '));
-      });
-    }
-
-    document.getElementById('info-dpaths').textContent=allPaths.length;
-    setStatus(`🌲 DFS: Tìm thấy ${allPaths.length} đường đi (tím=đường khác, vàng=ngắn nhất BFS)`);
-    animPhase='idle';
-  }, 30);
-}
-
-/* ═══════════════════════════════════════
-   MOVE ANIMATION
-═══════════════════════════════════════ */
-function runMove(){
-  if(!bfsPath.length){ toast('Hãy chạy BFS trước!'); return; }
-  stopAnim();
-  animPhase='move'; animStep=0; tickMove();
-}
-function tickMove(){
-  if(animPhase!=='move') return;
-  if(animStep<bfsPath.length){
-    const prev=agentCell;
-    agentCell=bfsPath[animStep];
-    if(prev) redrawCell(prev[0],prev[1]);
-    redrawCell(agentCell[0],agentCell[1],true);
-    setStatus(`🚀 Agent di chuyển... bước ${animStep}/${bfsPath.length-1} → (${agentCell[0]},${agentCell[1]})`);
-    animStep++; animId=setTimeout(tickMove,animSpeed+40);
-  } else {
-    agentCell=null; redrawAll();
-    setStatus(`🏁 Đến đích! Đường: ${bfsPath.length-1} bước | DFS: ${allPaths.length} đường`);
-    animPhase='idle';
-  }
-}
-
-/* ═══════════════════════════════════════
-   CONTROLS
-═══════════════════════════════════════ */
-function stopAnim(){
-  if(animId) clearTimeout(animId);
-  animId=null; animPhase='idle';
-}
-function resetView(){
-  stopAnim(); bfsPath=[]; bfsLog=[];
-  visitedSet.clear(); pathSet.clear(); altSet.clear(); agentCell=null;
-  redrawAll();
-  setStatus('↺ Đã reset. BFS và DFS đã xóa.');
-}
-function checkReady(){
-  if(!startCell||!endCell){ toast('Hãy đặt điểm A và B trước (tab ⚙ Lưới > chế độ)'); return false; }
-  if(sameCell(startCell,endCell)){ toast('A và B không được trùng nhau!'); return false; }
-  return true;
-}
-function updateInfoBar(){
-  document.getElementById('info-start').textContent=startCell?`(${startCell[0]},${startCell[1]})`:'-';
-  document.getElementById('info-end').textContent  =endCell  ?`(${endCell[0]},${endCell[1]})`:'-';
-  document.getElementById('info-size').textContent =`${ROWS}×${COLS}`;
-}
-
-/* ═══════════════════════════════════════
-   RANDOM MAZE
-═══════════════════════════════════════ */
-function generateRandom(){
-  const density=parseInt(document.getElementById('densitySlider').value)/100;
-  gridData=Array.from({length:ROWS},()=>
-    Array.from({length:COLS},()=>Math.random()<density?1:0));
-  // Ensure start/end are clear
-  if(startCell) gridData[startCell[0]][startCell[1]]=0;
-  if(endCell)   gridData[endCell[0]][endCell[1]]=0;
-  bfsPath=[]; bfsLog=[]; allPaths=[];
-  visitedSet.clear(); pathSet.clear(); altSet.clear();
-  redrawAll();
-  setStatus(`🎲 Random maze ${ROWS}×${COLS} (${(density*100).toFixed(0)}% tường)`);
-}
-document.getElementById('densitySlider').oninput=function(){
-  document.getElementById('densityVal').textContent=this.value+'%';
-};
-
-/* ═══════════════════════════════════════
-   CELL SIZE
-═══════════════════════════════════════ */
-function setCellSize(v){
-  document.documentElement.style.setProperty('--cell-size',v+'px');
-  document.getElementById('cellSizeVal').textContent=v;
-}
-
-/* ═══════════════════════════════════════
-   SPEED
-═══════════════════════════════════════ */
-document.getElementById('speedSlider').oninput=function(){
-  animSpeed=parseInt(this.value);
-  document.getElementById('speedVal').textContent=this.value+'ms';
-};
-
-/* ═══════════════════════════════════════
-   EXPORT / IMPORT
-═══════════════════════════════════════ */
-function exportGrid(){
-  const data=JSON.stringify({rows:ROWS,cols:COLS,grid:gridData,start:startCell,end:endCell},null,2);
-  const a=document.createElement('a');
-  a.href='data:application/json,'+encodeURIComponent(data);
-  a.download='grid.json'; a.click();
-  toast('Đã xuất grid.json!');
-}
-function importGrid(e){
-  const f=e.target.files[0]; if(!f) return;
-  const r=new FileReader();
-  r.onload=ev=>{
-    try{
-      const d=JSON.parse(ev.target.result);
-      ROWS=d.rows; COLS=d.cols; gridData=d.grid;
-      startCell=d.start; endCell=d.end;
-      document.getElementById('inp-rows').value=ROWS;
-      document.getElementById('inp-cols').value=COLS;
-      bfsPath=[]; bfsLog=[]; allPaths=[];
-      buildDOM(); updateInfoBar();
-      toast('Đã nhập lưới thành công!');
-    } catch(err){ toast('File JSON không hợp lệ!'); }
-  };
-  r.readAsText(f);
-}
-
-/* ═══════════════════════════════════════
-   THEME CUSTOMIZATION
-═══════════════════════════════════════ */
-function setVar(name,val){
-  document.documentElement.style.setProperty(name,val);
-}
-
-const THEMES={
-  'Cyber Neon':{
-    '--bg':'#0a0a12','--panel':'#12121e','--panel2':'#1a1a2e',
-    '--accent':'#00f5d4','--accent2':'#f72585','--border':'#2a2a4a',
-    '--cell-free':'#1a1a2e','--cell-wall':'#0d0d18',
-    '--cell-vis':'#1a4a6a','--cell-path':'#5a3a00',
-    '--cell-start':'#004a30','--cell-end':'#4a0010',
-    '--cell-agent':'#6a2000','--cell-alt':'#2a1a5a',
-  },
-  'Forest':{
-    '--bg':'#0d1a0d','--panel':'#122012','--panel2':'#1a2e1a',
-    '--accent':'#7ec850','--accent2':'#e8a020','--border':'#2a3a2a',
-    '--cell-free':'#1a2e1a','--cell-wall':'#0a120a',
-    '--cell-vis':'#1a3a1a','--cell-path':'#3a3000',
-    '--cell-start':'#003a10','--cell-end':'#3a1a00',
-    '--cell-agent':'#5a2800','--cell-alt':'#1a3010',
-  },
-  'Ocean':{
-    '--bg':'#000d1a','--panel':'#001225','--panel2':'#001830',
-    '--accent':'#00cfff','--accent2':'#ff6b35','--border':'#002a40',
-    '--cell-free':'#001830','--cell-wall':'#000a14',
-    '--cell-vis':'#003a50','--cell-path':'#403000',
-    '--cell-start':'#004040','--cell-end':'#400020',
-    '--cell-agent':'#602010','--cell-alt':'#201050',
-  },
-  'Lava':{
-    '--bg':'#120000','--panel':'#1e0000','--panel2':'#2a0000',
-    '--accent':'#ff4500','--accent2':'#ffd700','--border':'#3a1000',
-    '--cell-free':'#1e0800','--cell-wall':'#0a0000',
-    '--cell-vis':'#3a1000','--cell-path':'#3a2000',
-    '--cell-start':'#003a00','--cell-end':'#3a0000',
-    '--cell-agent':'#5a0000','--cell-alt':'#1a0a30',
-  },
-  'Arctic':{
-    '--bg':'#e8f0f5','--panel':'#d0dde8','--panel2':'#c0ccd8',
-    '--accent':'#0070cc','--accent2':'#cc4400','--border':'#b0bcc8',
-    '--cell-free':'#ddeef8','--cell-wall':'#7090a8',
-    '--cell-vis':'#a0d0f0','--cell-path':'#f0e060',
-    '--cell-start':'#a0f0c0','--cell-end':'#f0a0a0',
-    '--cell-agent':'#f07040','--cell-alt':'#d0b0f0',
-    '--text':'#102030','--text-dim':'#506070',
-  },
-  'Sakura':{
-    '--bg':'#1a0a12','--panel':'#250d1a','--panel2':'#2e1020',
-    '--accent':'#ff9ec4','--accent2':'#ffce7a','--border':'#3a1a28',
-    '--cell-free':'#2e1020','--cell-wall':'#0e0008',
-    '--cell-vis':'#3a102a','--cell-path':'#3a2800',
-    '--cell-start':'#002a1a','--cell-end':'#2a0010',
-    '--cell-agent':'#4a1000','--cell-alt':'#201040',
-  },
-};
-
-// Build theme preset buttons
-function buildThemePresets(){
-  const container=document.getElementById('theme-presets');
-  Object.entries(THEMES).forEach(([name,vars])=>{
-    const btn=document.createElement('div');
-    btn.className='theme-btn';
-    btn.style.background=vars['--panel']||'#111';
-    btn.style.color=vars['--accent']||'#fff';
-    btn.style.border=`1px solid ${vars['--accent']||'#444'}`;
-    btn.textContent=name;
-    btn.onclick=()=>applyTheme(vars,name);
-    container.appendChild(btn);
-  });
-}
-function applyTheme(vars,name){
-  Object.entries(vars).forEach(([k,v])=>setVar(k,v));
-  toast(`Theme: ${name}`);
-}
-
-/* ═══════════════════════════════════════
-   TABS
-═══════════════════════════════════════ */
-function switchTab(name){
-  document.querySelectorAll('.tab').forEach((t,i)=>{
-    const names=['results','grid','theme'];
-    t.classList.toggle('active',names[i]===name);
-  });
-  document.querySelectorAll('.tab-content').forEach(el=>{
-    el.classList.toggle('active',el.id===`tab-${name}`);
-  });
-}
-
-/* ═══════════════════════════════════════
-   UI HELPERS
-═══════════════════════════════════════ */
-function setStatus(msg,cls=''){
-  const el=document.getElementById('status');
-  el.textContent=msg; el.className=cls;
-}
-function log(html){
-  const el=document.getElementById('result-box');
-  el.innerHTML+=html+'<br>';
-  el.scrollTop=el.scrollHeight;
-}
-function logClear(){
-  document.getElementById('result-box').innerHTML='';
-}
-let toastTimer;
-function toast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>el.classList.remove('show'),2500);
-}
-
-/* ═══════════════════════════════════════
-   INIT
-═══════════════════════════════════════ */
-buildThemePresets();
-loadSample();
-updateInfoBar();
-</script>
-</body>
-</html>
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog
+import json
+import hashlib
+import os
+import collections
+import time
+import threading
+
+# ══════════════════════════════════════════════
+#  CẤU HÌNH MÀU SẮC & HẰNG SỐ
+# ══════════════════════════════════════════════
+BG         = "#1e1e2e"
+BG2        = "#2a2a3e"
+ACCENT     = "#7c3aed"
+ACCENT2    = "#a78bfa"
+BTN_BG     = "#3730a3"
+BTN_HOV    = "#4f46e5"
+TEXT       = "#f1f5f9"
+TEXT2      = "#94a3b8"
+ERR        = "#ef4444"
+OK         = "#22c55e"
+WARN       = "#f59e0b"
+
+C_FREE     = "#334155"   # ô trống
+C_WALL     = "#0f172a"   # tường
+C_VISITED  = "#1d4ed8"   # BFS đã duyệt
+C_PATH     = "#fbbf24"   # đường ngắn nhất
+C_ALT      = "#7c3aed"   # đường DFS khác
+C_AGENT    = "#f97316"   # agent
+C_START    = "#16a34a"   # điểm bắt đầu
+C_END      = "#dc2626"   # điểm kết thúc
+C_BORDER   = "#475569"
+
+DIRS       = [(-1,0),(1,0),(0,-1),(0,1)]
+ACCOUNTS_FILE = "accounts.json"
+
+SAMPLE_GRID = [
+    [0,1,0,0,0,0],
+    [0,1,0,1,1,0],
+    [0,0,0,1,0,0],
+    [1,1,0,0,0,1],
+    [0,0,1,1,0,0],
+    [0,0,0,0,0,0],
+]
+
+# ══════════════════════════════════════════════
+#  QUẢN LÝ TÀI KHOẢN
+# ══════════════════════════════════════════════
+
+def load_accounts():
+    if os.path.exists(ACCOUNTS_FILE):
+        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_accounts(accounts):
+    with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(accounts, f, indent=2, ensure_ascii=False)
+
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+# ══════════════════════════════════════════════
+#  THUẬT TOÁN BFS / DFS
+# ══════════════════════════════════════════════
+
+def bfs(grid, start, end):
+    rows, cols = len(grid), len(grid[0])
+    queue   = collections.deque([start])
+    visited = {start}
+    parent  = {start: None}
+    log     = [start]
+    while queue:
+        curr = queue.popleft()
+        if curr == end:
+            break
+        for dr, dc in DIRS:
+            nr, nc = curr[0]+dr, curr[1]+dc
+            nxt = (nr, nc)
+            if 0<=nr<rows and 0<=nc<cols and grid[nr][nc]==0 and nxt not in visited:
+                visited.add(nxt)
+                parent[nxt] = curr
+                queue.append(nxt)
+                log.append(nxt)
+    if end not in parent:
+        return None, log
+    path = []
+    node = end
+    while node is not None:
+        path.append(node)
+        node = parent[node]
+    path.reverse()
+    return path, log
+
+def dfs_all_paths(grid, start, end):
+    rows, cols = len(grid), len(grid[0])
+    all_paths = []
+    visited   = set()
+    def dfs(node, path):
+        if node == end:
+            all_paths.append(path[:])
+            return
+        visited.add(node)
+        for dr, dc in DIRS:
+            nr, nc = node[0]+dr, node[1]+dc
+            nxt = (nr, nc)
+            if 0<=nr<rows and 0<=nc<cols and grid[nr][nc]==0 and nxt not in visited:
+                path.append(nxt)
+                dfs(nxt, path)
+                path.pop()
+        visited.remove(node)
+    dfs(start, [start])
+    return all_paths
+
+# ══════════════════════════════════════════════
+#  TIỆN ÍCH WIDGET
+# ══════════════════════════════════════════════
+
+def style_btn(btn, bg=BTN_BG, fg=TEXT, font=("Segoe UI", 10, "bold")):
+    btn.configure(bg=bg, fg=fg, font=font, relief="flat",
+                  cursor="hand2", padx=12, pady=6, bd=0,
+                  activebackground=BTN_HOV, activeforeground=TEXT)
+
+def label(parent, text, size=10, bold=False, color=TEXT, **kw):
+    w = tk.Label(parent, text=text,
+                 font=("Segoe UI", size, "bold" if bold else "normal"),
+                 bg=kw.pop("bg", BG), fg=color, **kw)
+    return w
+
+def entry(parent, show=None, width=24):
+    e = tk.Entry(parent, font=("Segoe UI", 11), bg=BG2, fg=TEXT,
+                 insertbackground=TEXT, relief="flat",
+                 highlightthickness=1, highlightbackground=ACCENT,
+                 highlightcolor=ACCENT2, bd=0, width=width, show=show or "")
+    return e
+
+# ══════════════════════════════════════════════
+#  MÀN HÌNH ĐĂNG NHẬP / ĐĂNG KÝ
+# ══════════════════════════════════════════════
+
+class AuthWindow:
+    def __init__(self, root):
+        self.root  = root
+        self.accounts = load_accounts()
+        self.logged_in_user = None
+
+        root.title("Pathfinder – Đăng nhập")
+        root.configure(bg=BG)
+        root.resizable(False, False)
+        self._center(root, 440, 540)
+        self._build()
+
+    def _center(self, win, w, h):
+        win.update_idletasks()
+        x = (win.winfo_screenwidth()  - w) // 2
+        y = (win.winfo_screenheight() - h) // 2
+        win.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _build(self):
+        # Header
+        hdr = tk.Frame(self.root, bg=ACCENT, height=6)
+        hdr.pack(fill="x")
+
+        tk.Frame(self.root, bg=BG, height=20).pack()
+        label(self.root, "🔷 BFS / DFS PATHFINDER", size=16, bold=True,
+              color=ACCENT2).pack()
+        label(self.root, "Đăng nhập để bắt đầu", size=10, color=TEXT2).pack(pady=(2,20))
+
+        # Tabs
+        self.tab_frame = tk.Frame(self.root, bg=BG2, bd=0)
+        self.tab_frame.pack(fill="x", padx=40)
+        self.tab_login  = tk.Button(self.tab_frame, text="  Đăng nhập  ",
+                                     command=self._show_login)
+        self.tab_signup = tk.Button(self.tab_frame, text="  Đăng ký  ",
+                                     command=self._show_signup)
+        for b in (self.tab_login, self.tab_signup):
+            b.configure(bg=BG2, fg=TEXT2, font=("Segoe UI",10), relief="flat",
+                        cursor="hand2", bd=0, pady=8,
+                        activebackground=ACCENT, activeforeground=TEXT)
+            b.pack(side="left", padx=2)
+
+        # Content area
+        self.content = tk.Frame(self.root, bg=BG)
+        self.content.pack(fill="both", expand=True, padx=40, pady=10)
+
+        self.msg_var = tk.StringVar()
+        self.msg_lbl = tk.Label(self.root, textvariable=self.msg_var,
+                                 font=("Segoe UI", 9), bg=BG, fg=ERR)
+        self.msg_lbl.pack(pady=4)
+
+        self._show_login()
+
+    def _clear_content(self):
+        for w in self.content.winfo_children():
+            w.destroy()
+
+    def _show_login(self):
+        self._clear_content()
+        self.msg_var.set("")
+        self.tab_login.configure(bg=ACCENT, fg=TEXT)
+        self.tab_signup.configure(bg=BG2, fg=TEXT2)
+
+        label(self.content, "Tên đăng nhập", size=9, color=TEXT2, bg=BG).pack(anchor="w", pady=(14,2))
+        self.login_user = entry(self.content)
+        self.login_user.pack(fill="x", ipady=6)
+
+        label(self.content, "Mật khẩu", size=9, color=TEXT2, bg=BG).pack(anchor="w", pady=(10,2))
+        self.login_pw = entry(self.content, show="●")
+        self.login_pw.pack(fill="x", ipady=6)
+
+        tk.Frame(self.content, bg=BG, height=16).pack()
+        btn = tk.Button(self.content, text="Đăng nhập →",
+                        command=self._do_login)
+        style_btn(btn, bg=ACCENT, font=("Segoe UI",11,"bold"))
+        btn.pack(fill="x", ipady=6)
+
+        self.login_pw.bind("<Return>", lambda e: self._do_login())
+
+    def _show_signup(self):
+        self._clear_content()
+        self.msg_var.set("")
+        self.tab_signup.configure(bg=ACCENT, fg=TEXT)
+        self.tab_login.configure(bg=BG2, fg=TEXT2)
+
+        label(self.content, "Họ tên hiển thị", size=9, color=TEXT2, bg=BG).pack(anchor="w", pady=(8,2))
+        self.su_name = entry(self.content)
+        self.su_name.pack(fill="x", ipady=5)
+
+        label(self.content, "Tên đăng nhập", size=9, color=TEXT2, bg=BG).pack(anchor="w", pady=(8,2))
+        self.su_user = entry(self.content)
+        self.su_user.pack(fill="x", ipady=5)
+
+        label(self.content, "Mật khẩu (≥ 6 ký tự)", size=9, color=TEXT2, bg=BG).pack(anchor="w", pady=(8,2))
+        self.su_pw = entry(self.content, show="●")
+        self.su_pw.pack(fill="x", ipady=5)
+
+        label(self.content, "Nhập lại mật khẩu", size=9, color=TEXT2, bg=BG).pack(anchor="w", pady=(8,2))
+        self.su_pw2 = entry(self.content, show="●")
+        self.su_pw2.pack(fill="x", ipady=5)
+
+        tk.Frame(self.content, bg=BG, height=10).pack()
+        btn = tk.Button(self.content, text="Tạo tài khoản ✓",
+                        command=self._do_signup)
+        style_btn(btn, bg=OK, font=("Segoe UI",11,"bold"))
+        btn.pack(fill="x", ipady=6)
+
+    def _msg(self, txt, color=ERR):
+        self.msg_var.set(txt)
+        self.msg_lbl.configure(fg=color)
+
+    def _do_login(self):
+        u = self.login_user.get().strip()
+        p = self.login_pw.get()
+        if not u or not p:
+            self._msg("⚠ Vui lòng nhập đủ thông tin!")
+            return
+        if u not in self.accounts:
+            self._msg("❌ Tên đăng nhập không tồn tại!")
+            return
+        if self.accounts[u]["password"] != hash_pw(p):
+            self._msg("❌ Sai mật khẩu!")
+            return
+        self.logged_in_user = u
+        self._msg(f"✅ Chào {self.accounts[u]['name']}!", color=OK)
+        self.root.after(700, self._open_main)
+
+    def _do_signup(self):
+        name = self.su_name.get().strip()
+        u    = self.su_user.get().strip()
+        p    = self.su_pw.get()
+        p2   = self.su_pw2.get()
+        if not name or not u or not p:
+            self._msg("⚠ Vui lòng nhập đủ thông tin!")
+            return
+        if len(u) < 3:
+            self._msg("⚠ Tên đăng nhập ít nhất 3 ký tự!")
+            return
+        if len(p) < 6:
+            self._msg("⚠ Mật khẩu ít nhất 6 ký tự!")
+            return
+        if p != p2:
+            self._msg("⚠ Mật khẩu không khớp!")
+            return
+        if u in self.accounts:
+            self._msg("⚠ Tên đăng nhập đã tồn tại!")
+            return
+        self.accounts[u] = {
+            "name": name,
+            "password": hash_pw(p),
+            "created": time.strftime("%Y-%m-%d %H:%M"),
+            "history": []
+        }
+        save_accounts(self.accounts)
+        self._msg(f"✅ Tạo tài khoản thành công! Hãy đăng nhập.", color=OK)
+        self.root.after(1000, self._show_login)
+
+    def _open_main(self):
+        self.root.withdraw()
+        main_win = tk.Toplevel(self.root)
+        app = MainApp(main_win, self.logged_in_user, self.accounts, self.root)
+
+
+# ══════════════════════════════════════════════
+#  ỨNG DỤNG CHÍNH
+# ══════════════════════════════════════════════
+
+class MainApp:
+    def __init__(self, root, username, accounts, auth_root):
+        self.root       = root
+        self.username   = username
+        self.accounts   = accounts
+        self.auth_root  = auth_root
+        self.grid_data  = []
+        self.start_pt   = None
+        self.end_pt     = None
+        self.cell_size  = 60
+        self.anim_id    = None
+        self.bfs_path   = None
+        self.all_paths  = []
+        self.visited_log= []
+
+        root.title(f"Pathfinder – {accounts[username]['name']}")
+        root.configure(bg=BG)
+        root.resizable(True, True)
+        self._center(root, 1100, 750)
+        root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._build_ui()
+
+    def _center(self, win, w, h):
+        win.update_idletasks()
+        x = (win.winfo_screenwidth()  - w) // 2
+        y = (win.winfo_screenheight() - h) // 2
+        win.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _on_close(self):
+        self.root.destroy()
+        self.auth_root.destroy()
+
+    # ── BUILD UI ──────────────────────────────
+    def _build_ui(self):
+        # Top bar
+        topbar = tk.Frame(self.root, bg=ACCENT, height=44)
+        topbar.pack(fill="x")
+        topbar.pack_propagate(False)
+        tk.Label(topbar, text="  🔷 BFS/DFS PATHFINDER",
+                 font=("Segoe UI",13,"bold"), bg=ACCENT, fg=TEXT).pack(side="left", padx=10)
+        user_name = self.accounts[self.username]["name"]
+        tk.Label(topbar, text=f"👤 {user_name}",
+                 font=("Segoe UI",10), bg=ACCENT, fg=TEXT).pack(side="right", padx=16)
+
+        # Main layout
+        main = tk.Frame(self.root, bg=BG)
+        main.pack(fill="both", expand=True)
+
+        # Left panel – controls
+        left = tk.Frame(main, bg=BG2, width=280)
+        left.pack(side="left", fill="y", padx=(8,4), pady=8)
+        left.pack_propagate(False)
+        self._build_left(left)
+
+        # Right panel – canvas + log
+        right = tk.Frame(main, bg=BG)
+        right.pack(side="left", fill="both", expand=True, padx=(4,8), pady=8)
+        self._build_right(right)
+
+    # ── LEFT PANEL ────────────────────────────
+    def _build_left(self, parent):
+        def sec(txt):
+            f = tk.Frame(parent, bg=ACCENT, height=2)
+            f.pack(fill="x", padx=8, pady=(14,0))
+            tk.Label(parent, text=txt, font=("Segoe UI",9,"bold"),
+                     bg=BG2, fg=ACCENT2).pack(anchor="w", padx=10, pady=(2,6))
+
+        # ─ Lưới
+        sec("⬛  CÀI ĐẶT LƯỚI")
+        row_f = tk.Frame(parent, bg=BG2); row_f.pack(fill="x", padx=8)
+        tk.Label(row_f, text="Hàng:", font=("Segoe UI",9), bg=BG2, fg=TEXT2).pack(side="left")
+        self.rows_var = tk.StringVar(value="6")
+        tk.Spinbox(row_f, from_=2, to=20, textvariable=self.rows_var, width=4,
+                   font=("Segoe UI",10), bg=BG, fg=TEXT, buttonbackground=ACCENT,
+                   relief="flat").pack(side="left", padx=4)
+        tk.Label(row_f, text="Cột:", font=("Segoe UI",9), bg=BG2, fg=TEXT2).pack(side="left", padx=(8,0))
+        self.cols_var = tk.StringVar(value="6")
+        tk.Spinbox(row_f, from_=2, to=20, textvariable=self.cols_var, width=4,
+                   font=("Segoe UI",10), bg=BG, fg=TEXT, buttonbackground=ACCENT,
+                   relief="flat").pack(side="left", padx=4)
+
+        b1 = tk.Button(parent, text="📋  Tạo lưới trống", command=self._new_grid)
+        style_btn(b1, bg=BTN_BG); b1.pack(fill="x", padx=8, pady=(6,2))
+        b2 = tk.Button(parent, text="✨  Dùng lưới mẫu", command=self._load_sample)
+        style_btn(b2, bg="#0f766e"); b2.pack(fill="x", padx=8, pady=2)
+
+        # ─ Điểm A/B
+        sec("📍  ĐIỂM ĐI / ĐẾN")
+        grid_f = tk.Frame(parent, bg=BG2); grid_f.pack(padx=8, pady=2)
+        for col, txt in enumerate(["","Hàng","Cột"]):
+            tk.Label(grid_f, text=txt, font=("Segoe UI",9,"bold"),
+                     bg=BG2, fg=TEXT2, width=6).grid(row=0, column=col, pady=2)
+        for row_i, (lbl, col) in enumerate([("🟢 A (Bắt đầu)", C_START),
+                                              ("🔴 B (Kết thúc)", C_END)], 1):
+            tk.Label(grid_f, text=lbl, font=("Segoe UI",9), bg=BG2,
+                     fg=col, width=14, anchor="w").grid(row=row_i, column=0, pady=3, sticky="w")
+        self.ar_var = tk.StringVar(value="0")
+        self.ac_var = tk.StringVar(value="0")
+        self.br_var = tk.StringVar(value="5")
+        self.bc_var = tk.StringVar(value="5")
+        for i, (rv, cv) in enumerate([(self.ar_var, self.ac_var),
+                                       (self.br_var, self.bc_var)], 1):
+            tk.Spinbox(grid_f, from_=0, to=19, textvariable=rv, width=4,
+                       font=("Segoe UI",10), bg=BG, fg=TEXT, relief="flat",
+                       buttonbackground=ACCENT).grid(row=i, column=1, padx=4)
+            tk.Spinbox(grid_f, from_=0, to=19, textvariable=cv, width=4,
+                       font=("Segoe UI",10), bg=BG, fg=TEXT, relief="flat",
+                       buttonbackground=ACCENT).grid(row=i, column=2, padx=4)
+
+        # ─ Thuật toán
+        sec("⚙️  THUẬT TOÁN")
+        self.algo_var = tk.StringVar(value="BFS")
+        f_algo = tk.Frame(parent, bg=BG2); f_algo.pack(padx=8, pady=4)
+        for txt in ("BFS", "DFS", "Cả hai"):
+            tk.Radiobutton(f_algo, text=txt, variable=self.algo_var, value=txt,
+                           font=("Segoe UI",10), bg=BG2, fg=TEXT,
+                           selectcolor=ACCENT, activebackground=BG2,
+                           activeforeground=ACCENT2).pack(side="left", padx=6)
+
+        speed_f = tk.Frame(parent, bg=BG2); speed_f.pack(fill="x", padx=8, pady=2)
+        tk.Label(speed_f, text="Tốc độ:", font=("Segoe UI",9), bg=BG2, fg=TEXT2).pack(side="left")
+        self.speed_var = tk.IntVar(value=80)
+        tk.Scale(speed_f, from_=10, to=300, orient="horizontal",
+                 variable=self.speed_var, bg=BG2, fg=TEXT, troughcolor=BG,
+                 highlightthickness=0, length=120, showvalue=False).pack(side="left", padx=4)
+        tk.Label(speed_f, textvariable=tk.StringVar(), font=("Segoe UI",8),
+                 bg=BG2, fg=TEXT2).pack(side="left")
+
+        b_run = tk.Button(parent, text="▶  CHẠY TÌM ĐƯỜNG", command=self._run)
+        style_btn(b_run, bg=ACCENT, font=("Segoe UI",11,"bold"))
+        b_run.pack(fill="x", padx=8, pady=(10,2))
+
+        b_stop = tk.Button(parent, text="⏹  Dừng animation", command=self._stop_anim)
+        style_btn(b_stop, bg="#7f1d1d")
+        b_stop.pack(fill="x", padx=8, pady=2)
+
+        b_reset = tk.Button(parent, text="🔄  Reset lưới", command=self._reset_view)
+        style_btn(b_reset, bg="#374151")
+        b_reset.pack(fill="x", padx=8, pady=2)
+
+        # ─ Lịch sử
+        sec("📜  LỊCH SỬ TÌM KIẾM")
+        self.hist_box = tk.Text(parent, height=6, font=("Consolas",8),
+                                bg=BG, fg=TEXT2, relief="flat",
+                                state="disabled", wrap="word")
+        self.hist_box.pack(fill="x", padx=8, pady=4)
+        self._refresh_history()
+
+    # ── RIGHT PANEL ───────────────────────────
+    def _build_right(self, parent):
+        # Canvas area
+        self.canvas_frame = tk.Frame(parent, bg=BG)
+        self.canvas_frame.pack(fill="both", expand=True)
+
+        self.canvas = tk.Canvas(self.canvas_frame, bg=BG, highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Button-1>", self._canvas_click)
+
+        # Bottom status bar
+        bot = tk.Frame(parent, bg=BG2, height=32)
+        bot.pack(fill="x", pady=(4,0))
+        bot.pack_propagate(False)
+        self.status_var = tk.StringVar(value="Hãy tạo hoặc chọn lưới mẫu để bắt đầu.")
+        tk.Label(bot, textvariable=self.status_var,
+                 font=("Segoe UI",9), bg=BG2, fg=TEXT2, anchor="w").pack(side="left", padx=10)
+
+        # Stats bar
+        stats = tk.Frame(parent, bg=BG)
+        stats.pack(fill="x")
+        self.stat_bfs  = self._stat_card(stats, "📏 Bước ngắn nhất (BFS)", "—")
+        self.stat_dfs  = self._stat_card(stats, "🔢 Tổng đường đến B", "—")
+        self.stat_visit= self._stat_card(stats, "🔍 Ô đã duyệt", "—")
+        self.stat_time = self._stat_card(stats, "⏱ Thời gian (ms)", "—")
+
+        # Log paths
+        log_lbl = tk.Label(parent, text="  📋 Tất cả đường đến B (DFS) – luôn hiển thị dù chọn BFS:",
+                           font=("Segoe UI",9,"bold"), bg=BG, fg=ACCENT2, anchor="w")
+        log_lbl.pack(fill="x")
+        log_frame = tk.Frame(parent, bg=BG); log_frame.pack(fill="x", pady=(0,4))
+        self.log_box = tk.Text(log_frame, height=5, font=("Consolas",8),
+                               bg=BG2, fg=TEXT, relief="flat", state="disabled")
+        sb = tk.Scrollbar(log_frame, command=self.log_box.yview, bg=BG2)
+        self.log_box.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        self.log_box.pack(fill="both", expand=True)
+
+    def _stat_card(self, parent, title, value):
+        f = tk.Frame(parent, bg=BG2, relief="flat")
+        f.pack(side="left", fill="x", expand=True, padx=3, pady=3)
+        tk.Label(f, text=title, font=("Segoe UI",8), bg=BG2, fg=TEXT2).pack(pady=(4,0))
+        var = tk.StringVar(value=value)
+        tk.Label(f, textvariable=var, font=("Segoe UI",14,"bold"),
+                 bg=BG2, fg=ACCENT2).pack(pady=(0,4))
+        return var
+
+    # ── GRID MANAGEMENT ───────────────────────
+    def _new_grid(self):
+        try:
+            r = int(self.rows_var.get())
+            c = int(self.cols_var.get())
+        except:
+            messagebox.showerror("Lỗi", "Số hàng/cột không hợp lệ!"); return
+        self.grid_data = [[0]*c for _ in range(r)]
+        self._draw_grid()
+        self._set_status("Lưới mới tạo. Click ô để đổi 0↔1.")
+
+    def _load_sample(self):
+        self.grid_data = [row[:] for row in SAMPLE_GRID]
+        self.rows_var.set(str(len(SAMPLE_GRID)))
+        self.cols_var.set(str(len(SAMPLE_GRID[0])))
+        self._draw_grid()
+        self._set_status("Đã tải lưới mẫu 6×6.")
+
+    def _canvas_click(self, event):
+        if not self.grid_data:
+            return
+        cs = self.cell_size
+        c = (event.x - 4) // cs
+        r = (event.y - 4) // cs
+        rows = len(self.grid_data)
+        cols = len(self.grid_data[0])
+        if 0 <= r < rows and 0 <= c < cols:
+            self.grid_data[r][c] ^= 1   # toggle 0/1
+            self._draw_grid()
+
+    def _draw_grid(self, visited=None, path=None, agent=None, alt_paths=None):
+        if not self.grid_data:
+            return
+        self.canvas.delete("all")
+        rows = len(self.grid_data)
+        cols = len(self.grid_data[0])
+
+        # Tính cell size tự động
+        cw = (self.canvas.winfo_width()  - 8) // cols
+        ch = (self.canvas.winfo_height() - 8) // rows
+        cs = max(20, min(cw, ch, 80))
+        self.cell_size = cs
+
+        visited  = set(visited or [])
+        path_set = set(path or [])
+
+        alt_set = set()
+        if alt_paths:
+            for ap in alt_paths:
+                for cell in ap:
+                    alt_set.add(cell)
+
+        start = self._get_start()
+        end   = self._get_end()
+
+        for r in range(rows):
+            for c in range(cols):
+                x0 = 4 + c * cs
+                y0 = 4 + r * cs
+                x1 = x0 + cs - 1
+                y1 = y0 + cs - 1
+                pos = (r, c)
+
+                if self.grid_data[r][c] == 1:
+                    fill = C_WALL
+                elif pos == start:
+                    fill = C_START
+                elif pos == end:
+                    fill = C_END
+                elif agent and pos == agent:
+                    fill = C_AGENT
+                elif pos in path_set:
+                    fill = C_PATH
+                elif pos in visited:
+                    fill = C_VISITED
+                elif pos in alt_set:
+                    fill = C_ALT
+                else:
+                    fill = C_FREE
+
+                self.canvas.create_rectangle(x0, y0, x1, y1,
+                                              fill=fill, outline=C_BORDER, width=1)
+                # số trong ô
+                txt_col = "#94a3b8" if self.grid_data[r][c]==0 else "#334155"
+                if pos == agent:
+                    self.canvas.create_text(x0+cs//2, y0+cs//2, text="●",
+                                             font=("Segoe UI",cs//3,"bold"), fill="white")
+                elif pos == start:
+                    self.canvas.create_text(x0+cs//2, y0+cs//2, text="A",
+                                             font=("Segoe UI",cs//3,"bold"), fill="white")
+                elif pos == end:
+                    self.canvas.create_text(x0+cs//2, y0+cs//2, text="B",
+                                             font=("Segoe UI",cs//3,"bold"), fill="white")
+                else:
+                    self.canvas.create_text(x0+cs//2, y0+cs//2,
+                                             text=str(self.grid_data[r][c]),
+                                             font=("Segoe UI", max(8, cs//4)), fill=txt_col)
+
+        # Vẽ đường path
+        if path and len(path) > 1:
+            for i in range(len(path)-1):
+                r1,c1 = path[i];   r2,c2 = path[i+1]
+                px1 = 4 + c1*cs + cs//2; py1 = 4 + r1*cs + cs//2
+                px2 = 4 + c2*cs + cs//2; py2 = 4 + r2*cs + cs//2
+                self.canvas.create_line(px1,py1,px2,py2, fill="#fef08a",
+                                         width=3, arrow=tk.LAST, arrowshape=(8,10,4))
+
+    # ── HELPERS ───────────────────────────────
+    def _get_start(self):
+        try:
+            r = int(self.ar_var.get()); c = int(self.ac_var.get())
+            rows = len(self.grid_data); cols = len(self.grid_data[0]) if self.grid_data else 0
+            if 0<=r<rows and 0<=c<cols and self.grid_data[r][c]==0:
+                return (r, c)
+        except: pass
+        return None
+
+    def _get_end(self):
+        try:
+            r = int(self.br_var.get()); c = int(self.bc_var.get())
+            rows = len(self.grid_data); cols = len(self.grid_data[0]) if self.grid_data else 0
+            if 0<=r<rows and 0<=c<cols and self.grid_data[r][c]==0:
+                return (r, c)
+        except: pass
+        return None
+
+    def _set_status(self, txt):
+        self.status_var.set(txt)
+
+    def _stop_anim(self):
+        if self.anim_id:
+            self.root.after_cancel(self.anim_id)
+            self.anim_id = None
+            self._set_status("⏹ Đã dừng animation.")
+
+    def _reset_view(self):
+        self._stop_anim()
+        self._draw_grid()
+        for v in (self.stat_bfs, self.stat_dfs, self.stat_visit, self.stat_time):
+            v.set("—")
+        self._set_status("Đã reset. Nhấn ▶ để chạy lại.")
+
+    def _refresh_history(self):
+        hist = self.accounts[self.username].get("history", [])
+        self.hist_box.configure(state="normal")
+        self.hist_box.delete("1.0", "end")
+        if not hist:
+            self.hist_box.insert("end", "(Chưa có lịch sử)")
+        else:
+            for h in reversed(hist[-10:]):
+                self.hist_box.insert("end", h + "\n")
+        self.hist_box.configure(state="disabled")
+
+    def _add_history(self, entry_txt):
+        h = self.accounts[self.username].setdefault("history", [])
+        h.append(entry_txt)
+        save_accounts(self.accounts)
+        self._refresh_history()
+
+    def _write_log(self, txt):
+        self.log_box.configure(state="normal")
+        self.log_box.delete("1.0", "end")
+        self.log_box.insert("end", txt)
+        self.log_box.configure(state="disabled")
+
+    # ── RUN ───────────────────────────────────
+    def _run(self):
+        if not self.grid_data:
+            messagebox.showwarning("Chưa có lưới", "Hãy tạo lưới trước!"); return
+        start = self._get_start()
+        end   = self._get_end()
+        if not start:
+            messagebox.showwarning("Lỗi", "Điểm A không hợp lệ hoặc nằm trên tường!"); return
+        if not end:
+            messagebox.showwarning("Lỗi", "Điểm B không hợp lệ hoặc nằm trên tường!"); return
+        if start == end:
+            messagebox.showwarning("Lỗi", "Điểm A và B phải khác nhau!"); return
+
+        self._stop_anim()
+        algo = self.algo_var.get()
+
+        # ── BFS: luôn chạy để tìm đường ngắn nhất ──────────────
+        t0 = time.perf_counter()
+        bfs_path, visited_log = bfs(self.grid_data, start, end)
+        t_bfs = time.perf_counter() - t0
+
+        # ── DFS: LUÔN chạy để đếm tất cả đường (bất kể chọn BFS/DFS/Cả hai) ──
+        self._set_status("🌲 Đang đếm tất cả đường có thể (DFS)...")
+        self.root.update_idletasks()
+        t0 = time.perf_counter()
+        all_paths = dfs_all_paths(self.grid_data, start, end)
+        t_dfs = time.perf_counter() - t0
+
+        self.bfs_path    = bfs_path or []
+        self.all_paths   = all_paths
+        self.visited_log = visited_log
+
+        # ── Stats ────────────────────────────────────────────────
+        bfs_steps = len(bfs_path) - 1 if bfs_path else "∞"
+        self.stat_bfs.set(str(bfs_steps))
+        self.stat_dfs.set(str(len(all_paths)))
+        self.stat_visit.set(str(len(visited_log)))
+        self.stat_time.set(f"{(t_bfs + t_dfs)*1000:.1f}")
+
+        # ── Log tất cả đường DFS ────────────────────────────────
+        if all_paths:
+            shortest_len = min(len(p)-1 for p in all_paths)
+            lines = [
+                f"  Tổng số đường: {len(all_paths)}",
+                f"  Đường ngắn nhất: {bfs_steps} bước",
+                f"  Đường dài nhất : {max(len(p)-1 for p in all_paths)} bước",
+                f"  Đường có ≤ {shortest_len+2} bước: "
+                f"{sum(1 for p in all_paths if len(p)-1 <= shortest_len+2)}",
+                "─" * 48,
+            ]
+            for i, p in enumerate(all_paths, 1):
+                tag = " ← NGẮN NHẤT" if len(p)-1 == bfs_steps else ""
+                lines.append(f"[{i:3}] ({len(p)-1} bước){tag}: {' → '.join(map(str, p))}")
+            self._write_log("\n".join(lines))
+        else:
+            self._write_log("❌ Không có đường nào từ A đến B.")
+
+        # ── Lưu lịch sử tài khoản ──────────────────────────────
+        ts = time.strftime("%m/%d %H:%M")
+        self._add_history(
+            f"{ts} | A={start}→B={end} | BFS:{bfs_steps}b | Tổng đường:{len(all_paths)}"
+        )
+
+        if not bfs_path:
+            messagebox.showinfo("Kết quả", f"❌ Không tìm thấy đường từ {start} đến {end}!")
+            self._draw_grid()
+            return
+
+        # Animation
+        self._animate(start, end, visited_log, bfs_path, all_paths, algo)
+
+    # ── ANIMATION ─────────────────────────────
+    def _animate(self, start, end, visited_log, bfs_path, all_paths, algo):
+        speed = max(10, self.speed_var.get())
+
+        # Pha 1 – BFS duyệt
+        phase1_len  = len(visited_log)
+        # Pha 2 – Hiện đường BFS (pause)
+        phase2_end  = phase1_len + 15
+        # Pha 3 – DFS paths
+        phase3_end  = phase2_end + (15 if all_paths else 0)
+        # Pha 4 – Agent di chuyển
+        phase4_len  = len(bfs_path)
+        phase4_end  = phase3_end + phase4_len + 15
+        total = phase4_end
+
+        frame = [0]
+
+        def step():
+            f = frame[0]
+            if f >= total:
+                self._draw_grid(path=bfs_path,
+                                alt_paths=all_paths if algo in ("DFS","Cả hai") else None)
+                n = len(all_paths)
+                self._set_status(
+                    f"✅ Hoàn tất!  BFS ngắn nhất: {len(bfs_path)-1} bước  |  "
+                    f"Tổng đường đến B: {n} đường"
+                )
+                return
+
+            if f < phase1_len:
+                self._draw_grid(visited=visited_log[:f+1])
+                self._set_status(f"🔍 BFS đang duyệt... ô [{f+1}/{phase1_len}]")
+
+            elif f < phase2_end:
+                self._draw_grid(visited=visited_log, path=bfs_path)
+                self._set_status(f"✅ BFS hoàn tất! Đường ngắn nhất: {len(bfs_path)-1} bước")
+
+            elif f < phase3_end:
+                self._draw_grid(path=bfs_path,
+                                alt_paths=all_paths if all_paths else None)
+                self._set_status(f"🌲 DFS tìm thấy {len(all_paths)} đường đi (màu tím)")
+
+            else:
+                move_i = f - phase3_end
+                if move_i < phase4_len:
+                    agent = bfs_path[move_i]
+                    self._draw_grid(path=bfs_path, agent=agent,
+                                    alt_paths=all_paths if algo in ("DFS","Cả hai") else None)
+                    self._set_status(f"🚀 Agent di chuyển... bước {move_i}/{len(bfs_path)-1}  {agent}")
+                else:
+                    self._draw_grid(path=bfs_path)
+                    self._set_status(f"🏁 Đã đến đích! Tổng: {len(bfs_path)-1} bước")
+
+            frame[0] += 1
+            self.anim_id = self.root.after(speed, step)
+
+        step()
+
+# ══════════════════════════════════════════════
+#  ENTRY POINT
+# ══════════════════════════════════════════════
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app  = AuthWindow(root)
+    root.mainloop()
